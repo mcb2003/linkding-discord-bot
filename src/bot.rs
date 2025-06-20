@@ -1,5 +1,6 @@
 use anyhow::Context as AnyhowContext;
 use poise::{Framework, serenity_prelude as serenity};
+use reqwest::Url;
 
 use crate::linkding::LinkdingApi;
 
@@ -93,4 +94,24 @@ pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
         .framework(framework)
         .await?;
     Ok(client)
+}
+
+pub type DateTime = chrono::DateTime<chrono::Utc>;
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct Bookmark {
+    id: u64,
+    url: Url,
+    title: String,
+    description: String,
+    notes: String,
+    web_archive_snapshot_url: Url,
+    favicon_url: String,
+    preview_image_url: String,
+    is_archived: bool,
+    unread: bool,
+    shared: bool,
+    tag_names: Vec<String>,
+    date_added: DateTime,
+    date_modified: DateTime,
 }

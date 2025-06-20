@@ -1,7 +1,12 @@
+mod linkding_api;
+use crate::linkding_api::LinkdingApi;
+
 use anyhow::Context as AnyhowContext;
 use poise::serenity_prelude as serenity;
 
-struct Data {}
+struct Data {
+    linkding: LinkdingApi,
+}
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -33,7 +38,10 @@ async fn main() -> anyhow::Result<()> {
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(Data {})
+                Ok(Data {
+                    linkding: LinkdingApi::from_env()
+                        .context("Could not create Linkding client")?,
+                })
             })
         })
         .build();

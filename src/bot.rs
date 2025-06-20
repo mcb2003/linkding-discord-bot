@@ -7,6 +7,24 @@ struct BotData {
     linkding: LinkdingApi,
 }
 
+/// Show this menu
+#[poise::command(prefix_command, track_edits, slash_command)]
+pub async fn help(
+    ctx: Context<'_>,
+    #[description = "Specific command to show help about"]
+    #[autocomplete = "poise::builtins::autocomplete_command"]
+    command: Option<String>,
+) -> anyhow::Result<()> {
+    let config = poise::builtins::HelpConfiguration {
+        extra_text_at_bottom: "\
+Type ?help command for more info on a command.
+You can edit your message to the bot and the bot will edit its response.",
+        ..Default::default()
+    };
+    poise::builtins::help(ctx, command.as_deref(), config).await?;
+    Ok(())
+}
+
 /// Register this bot's slash commands with Discord.
 ///
 /// This command is used to register the bot's commands when it starts up.
@@ -43,7 +61,7 @@ pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
 
     let framework = Framework::<BotData, anyhow::Error>::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![register(), status()],
+            commands: vec![help(), register(), status()],
             ..Default::default()
         })
         .setup(|ctx, ready, framework| {

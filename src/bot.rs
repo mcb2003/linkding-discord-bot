@@ -49,7 +49,7 @@ async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     let reply = match bot.linkding.is_reachable().await {
         Ok(()) => format!("✅ [Linkding]({}) is reachable!", bot.linkding.base_url()),
         Err(e) => format!(
-            "❌ [Linkding]({}) is not reachable: {:?}",
+            "❌ [Linkding]({}) is not reachable: {}",
             bot.linkding.base_url(),
             e
         ),

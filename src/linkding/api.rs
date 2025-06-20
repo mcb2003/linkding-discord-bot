@@ -1,5 +1,7 @@
 use anyhow::Context;
-use reqwest::Url;
+use url::Url;
+
+use super::{Bookmark, Error};
 
 #[derive(Debug)]
 pub struct LinkdingApi {
@@ -52,25 +54,18 @@ impl LinkdingApi {
     }
 
     /// Determine if the Linkding instance is reachable.
-    pub async fn is_reachable(&self) -> anyhow::Result<()> {
+    pub async fn is_reachable(&self) -> super::Result<()> {
         let url = self.base_url.join("api/")?;
-        let body = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .context("Failed to send request to Linkding API")?
-            .error_for_status()
-            .context("Received error response from Linkding API")?
+        let response = self.client.get(url).send().await?;
+        let response = Error::for_api_error(response).await?;
+        let body = response
             .json::<serde_json::Value>()
             .await
-            .context("Failed to parse response from Linkding API")?;
+            .map_err(|_| Error::InvalidResponseFormat)?;
 
         match body {
             serde_json::Value::Object(map) if map.is_empty() => Ok(()),
-            _ => Err(anyhow::anyhow!(
-                "Unexpected response format, maybe the base URL does not point to a Linkding instance?"
-            )),
+            _ => Err(Error::InvalidResponseFormat),
         }
     }
 }

@@ -1,0 +1,4 @@
+/target
+
+# dotenv file
+.env

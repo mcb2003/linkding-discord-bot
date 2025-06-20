@@ -1,7 +1,7 @@
 use anyhow::Context as AnyhowContext;
 use poise::{Framework, serenity_prelude as serenity};
 
-use crate::linkding_api::LinkdingApi;
+use crate::linkding::LinkdingApi;
 
 struct BotData {
     linkding: LinkdingApi,

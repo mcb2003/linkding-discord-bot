@@ -1,5 +1,5 @@
 mod bot;
-mod linkding_api;
+mod linkding;
 
 use anyhow::Context as AnyhowContext;
 

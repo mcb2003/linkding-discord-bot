@@ -8,6 +8,7 @@ struct BotData {
 }
 
 /// Show this menu
+#[tracing::instrument(skip(ctx))]
 #[poise::command(prefix_command, track_edits, slash_command)]
 pub async fn help(
     ctx: Context<'_>,
@@ -28,6 +29,7 @@ You can edit your message to the bot and the bot will edit its response.",
 /// Register this bot's slash commands with Discord.
 ///
 /// This command is used to register the bot's commands when it starts up.
+#[tracing::instrument(skip(ctx))]
 #[poise::command(prefix_command)]
 pub async fn register(ctx: Context<'_>) -> anyhow::Result<()> {
     poise::builtins::register_application_commands_buttons(ctx)
@@ -39,9 +41,10 @@ pub async fn register(ctx: Context<'_>) -> anyhow::Result<()> {
 type Context<'a> = poise::Context<'a, BotData, anyhow::Error>;
 
 /// Determine if the bot is working and can reach the Linkding instance.
+#[tracing::instrument(skip(ctx))]
 #[poise::command(slash_command, prefix_command)]
-async fn status(context: Context<'_>) -> anyhow::Result<()> {
-    let bot = context.framework().user_data().await;
+async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
+    let bot = ctx.framework().user_data().await;
     let reply = match bot.linkding.is_reachable().await {
         Ok(()) => format!("✅ [Linkding]({}) is reachable!", bot.linkding.base_url()),
         Err(e) => format!(
@@ -50,12 +53,13 @@ async fn status(context: Context<'_>) -> anyhow::Result<()> {
             e
         ),
     };
-    context.reply(reply).await?;
+    ctx.reply(reply).await?;
 
     Ok(())
 }
 
 /// Create a new Discord client that uses the bot's commands.
+#[tracing::instrument(skip(token))]
 pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
     let intents = serenity::GatewayIntents::non_privileged();
 

@@ -6,6 +6,9 @@ use anyhow::Context as AnyhowContext;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
+
+    tracing_subscriber::fmt::init();
+
     let token = std::env::var("DISCORD_TOKEN")
         .context("Could not retrieve Discord token from environment")?;
 

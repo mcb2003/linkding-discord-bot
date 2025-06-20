@@ -19,13 +19,21 @@ pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
             commands: vec![],
             ..Default::default()
         })
-        .setup(|ctx, _ready, framework| {
+        .setup(|ctx, ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(BotData {
+
+                let data = BotData {
                     linkding: LinkdingApi::from_env()
                         .context("Could not create Linkding client")?,
-                })
+                };
+
+                tracing::info!(
+                    name = ready.user.name,
+                    id = ready.user.id.get(),
+                    "Discord client connected"
+                );
+                Ok(data)
             })
         })
         .build();

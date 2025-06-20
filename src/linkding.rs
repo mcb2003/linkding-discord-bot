@@ -5,7 +5,6 @@ use reqwest::Url;
 pub struct LinkdingApi {
     client: reqwest::Client,
     base_url: reqwest::Url,
-    token: String,
 }
 
 /// Basic info and construction.
@@ -28,11 +27,7 @@ impl LinkdingApi {
             .build()
             .expect("Failed to build HTTP client");
 
-        LinkdingApi {
-            client,
-            base_url,
-            token,
-        }
+        LinkdingApi { client, base_url }
     }
 
     /// Create a new Linkding client from environment variables.

@@ -48,3 +48,34 @@ impl LinkdingApi {
         Ok(LinkdingApi::new(base_url, token))
     }
 }
+
+/// General operations.
+impl LinkdingApi {
+    /// Get the base URL of the Linkding instance.
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    /// Determine if the Linkding instance is reachable.
+    pub async fn is_reachable(&self) -> anyhow::Result<()> {
+        let url = self.base_url.join("api/")?;
+        let body = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .context("Failed to send request to Linkding API")?
+            .error_for_status()
+            .context("Received error response from Linkding API")?
+            .json::<serde_json::Value>()
+            .await
+            .context("Failed to parse response from Linkding API")?;
+
+        match body {
+            serde_json::Value::Object(map) if map.is_empty() => Ok(()),
+            _ => Err(anyhow::anyhow!(
+                "Unexpected response format, maybe the base URL does not point to a Linkding instance?"
+            )),
+        }
+    }
+}

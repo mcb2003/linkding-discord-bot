@@ -1,5 +1,6 @@
 use anyhow::Context as AnyhowContext;
 use poise::{CreateReply, Framework, serenity_prelude as serenity};
+use url::Url;
 
 use crate::linkding::{Bookmark, LinkdingApi};
 
@@ -68,7 +69,7 @@ async fn link(
     let bot = ctx.framework().user_data().await;
     let bookmark = bot.linkding.bookmark(id).await?;
 
-    let embed = bookmark_to_embed(bookmark);
+    let embed = bookmark_to_embed(bookmark, bot.linkding.base_url());
     ctx.send(CreateReply::default().reply(true).embed(embed))
         .await?;
 
@@ -76,29 +77,19 @@ async fn link(
 }
 
 /// Convert a [`Bookmark`] into a Discord embed.
-fn bookmark_to_embed(bookmark: Bookmark) -> serenity::CreateEmbed {
+fn bookmark_to_embed(bookmark: Bookmark, linkding_base_url: &Url) -> serenity::CreateEmbed {
     let mut embed = serenity::CreateEmbed::default()
         .title(bookmark.title)
         .description(bookmark.description)
         .url(bookmark.url)
         .timestamp(bookmark.date_added);
 
-    let tags = bookmark
-        .tag_names
-        .iter()
-        .fold(String::new(), |mut acc, next| {
-            if acc.is_empty() {
-                format!("#{next}")
-            } else {
-                acc.push_str(" #");
-                acc.push_str(next);
-                acc
-            }
-        });
-    embed =
-        embed
-            .field("Tags", tags, true)
-            .field("Shared", human_friendly_bool(bookmark.shared), true);
+    let tags = tags_to_md(&bookmark.tag_names, linkding_base_url);
+    embed = embed.field("Tags", tags, false).field(
+        "Shared",
+        human_friendly_bool(bookmark.shared),
+        true,
+    );
 
     if let Some(image) = bookmark.preview_image_url {
         embed = embed.image(image);
@@ -108,6 +99,50 @@ fn bookmark_to_embed(bookmark: Bookmark) -> serenity::CreateEmbed {
     }
 
     embed
+}
+
+/// Stringify a list of Linkding tags as markdown with embedded links.
+///
+/// We ensure the output is never longer than 1024 characters, the maximum length you can use in a Discord embed field.
+fn tags_to_md(tags: &[impl AsRef<str>], base_url: &Url) -> String {
+    use std::fmt::Write;
+
+    let tag_url = base_url.join("bookmarks").expect("Invalid tag URL");
+    let tag_page = |tag: &str| {
+        let query = format!("#{tag}");
+        let mut url = tag_url.clone();
+        url.query_pairs_mut()
+            .clear()
+            .append_pair("q", &query)
+            .finish();
+        url
+    };
+    let tag_md = |tag: &str| format!("[#{tag}]({})", tag_page(tag));
+
+    match tags.len() {
+        0 => String::from("None"),
+        1 => tag_md(tags[0].as_ref()),
+        2.. => {
+            // Always show at least one tag, even if it's too long
+            // This could be improved by trying to find the longest tags that fit, but this is fine for now.
+            let mut text = tag_md(tags[0].as_ref());
+            for (i, tag) in tags[1..].iter().enumerate() {
+                let tag_text = tag_md(tag.as_ref());
+                // This algorithm isn't perfect because the " and X more" text *may* be truncated, but since it's very likely to be shorter than a single tag (with link), this will be fine.
+                let new_length = text.len() + tag_text.len() + 1; // +1 for the space character
+                if new_length > 1024 {
+                    let remaining = tags.len() - i - 1;
+                    if remaining > 0 {
+                        write!(text, " and {remaining} more").unwrap();
+                    }
+                } else {
+                    text.push(' ');
+                    text.push_str(&tag_text);
+                }
+            }
+            text
+        }
+    }
 }
 
 /// Convert a `bool` value to an English word.

@@ -1,6 +1,8 @@
 use super::DateTime;
 
 #[derive(Debug, Clone, serde::Deserialize)]
+// Fixme: Remove warning when splitting into linkding_api crate
+#[allow(dead_code)]
 pub struct Bookmark {
     pub id: u64,
     pub url: String,

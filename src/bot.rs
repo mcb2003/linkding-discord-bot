@@ -2,7 +2,7 @@ use anyhow::Context as AnyhowContext;
 use poise::{CreateReply, Framework, serenity_prelude as serenity};
 use url::Url;
 
-use crate::linkding::{Bookmark, LinkdingApi};
+use crate::linkding::{Bookmark, CheckResponse, CreateBookmarkRequest, LinkdingApi};
 
 struct BotData {
     linkding: LinkdingApi,
@@ -40,6 +40,7 @@ pub async fn register(ctx: Context<'_>) -> anyhow::Result<()> {
 }
 
 type Context<'a> = poise::Context<'a, BotData, anyhow::Error>;
+type ApplicationContext<'a> = poise::structs::ApplicationContext<'a, BotData, anyhow::Error>;
 
 /// Determine if the bot is working and can reach the Linkding instance.
 #[tracing::instrument(skip(ctx))]
@@ -60,7 +61,12 @@ async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
 }
 
 /// Link management commands. With no subcommand, get a link by its ID.
-#[poise::command(slash_command, prefix_command, track_edits, subcommands("link_get"))]
+#[poise::command(
+    slash_command,
+    prefix_command,
+    track_edits,
+    subcommands("link_get", "link_add")
+)]
 async fn link(
     ctx: Context<'_>,
     #[description = "The ID of the link to retrieve"] id: u64,
@@ -82,31 +88,126 @@ async fn link_get_internal(ctx: Context<'_>, id: u64) -> anyhow::Result<()> {
     let bot = ctx.framework().user_data().await;
     let bookmark = bot.linkding.bookmark(id).await?;
 
-    let embed = bookmark_to_embed(bookmark, bot.linkding.base_url());
+    let embed = bookmark_to_embed(&bookmark, bot.linkding.base_url());
     ctx.send(CreateReply::default().reply(true).embed(embed))
         .await?;
 
     Ok(())
 }
 
+#[derive(Debug, poise::Modal)]
+#[name = "Edit Link"]
+struct EditLinkModal {
+    #[name = "URL"]
+    #[placeholder = "https://example.org"]
+    url: String,
+    #[name = "Tags (separated by space)"]
+    tags: Option<String>,
+    #[name = "Title"]
+    title: String,
+    #[name = "Description"]
+    #[paragraph]
+    description: Option<String>,
+    #[name = "Notes"]
+    #[paragraph]
+    notes: Option<String>,
+}
+
+impl From<CheckResponse> for EditLinkModal {
+    fn from(response: CheckResponse) -> Self {
+        Self {
+            url: response.scraped_url().to_string(),
+            title: response
+                .scraped_title()
+                .unwrap_or_else(|| response.scraped_url().as_str())
+                .to_string(),
+            description: response.scraped_description().map(ToString::to_string),
+            notes: None,
+            tags: Some(response.auto_tags().join(" ")),
+        }
+    }
+}
+
+impl From<EditLinkModal> for CreateBookmarkRequest {
+    fn from(modal: EditLinkModal) -> Self {
+        Self {
+            url: modal.url,
+            title: Some(modal.title),
+            description: modal.description,
+            notes: modal.notes.unwrap_or_default(),
+            tag_names: modal
+                .tags
+                .map(|s| s.split(' ').map(ToString::to_string).collect())
+                .unwrap_or_default(),
+            is_archived: false,
+            unread: false,
+            shared: true,
+        }
+    }
+}
+
+/// Add a new link.
+#[tracing::instrument(skip(ctx))]
+#[poise::command(slash_command, track_edits, rename = "add")]
+async fn link_add(
+    ctx: ApplicationContext<'_>,
+    #[description = "The link to add"] link: String,
+) -> anyhow::Result<()> {
+    let bot = ctx.framework().user_data().await;
+    let url = link.parse().context("Invalid URL")?;
+
+    let response = bot
+        .linkding
+        .check_bookmark(url)
+        .await
+        .context("Could not communicate with the Linkding API")?;
+
+    // If the bookmark is already saved, notify the user.
+    if let Some(bookmark) = response.bookmark() {
+        let reply = CreateReply::default()
+            .reply(true)
+            .ephemeral(true)
+            .content("⚠️ Link already exists")
+            .embed(bookmark_to_embed(bookmark, bot.linkding.base_url()));
+        ctx.send(reply).await?;
+        return Ok(());
+    }
+
+    let modal: EditLinkModal = response.into();
+    let req: CreateBookmarkRequest =
+        match poise::modal::execute_modal(ctx, Some(modal), None).await? {
+            Some(r) => r.into(),
+            None => return Ok(()), // Cancelled
+        };
+    let bookmark = bot.linkding.create_bookmark(req).await?;
+    let reply = CreateReply::default()
+        .reply(true)
+        .ephemeral(true)
+        .content("✅ Link created!")
+        .embed(bookmark_to_embed(&bookmark, bot.linkding.base_url()));
+    ctx.send(reply).await?;
+
+    Ok(())
+}
+
 /// Convert a [`Bookmark`] into a Discord embed.
-fn bookmark_to_embed(bookmark: Bookmark, linkding_base_url: &Url) -> serenity::CreateEmbed {
+fn bookmark_to_embed(bookmark: &Bookmark, linkding_base_url: &Url) -> serenity::CreateEmbed {
     let mut embed = serenity::CreateEmbed::default()
-        .title(bookmark.title)
-        .description(bookmark.description)
-        .url(bookmark.url)
+        .title(&bookmark.title)
+        .description(&bookmark.description)
+        .url(&bookmark.url)
         .timestamp(bookmark.date_added);
 
     let tags = tags_to_md(&bookmark.tag_names, linkding_base_url);
     embed = embed.field("Tags", tags, false);
 
-    if let Some(archive_url) = bookmark.web_archive_snapshot_url {
+    if let Some(archive_url) = &bookmark.web_archive_snapshot_url {
         let value = format!("[view on the Wayback Machine]({})", archive_url);
         embed = embed.field("Snapshot", value, true);
     }
 
     if !bookmark.notes.is_empty() {
-        embed = embed.field("Notes", bookmark.notes, false);
+        embed = embed.field("Notes", &bookmark.notes, false);
     }
 
     // Various miscelaneous information displayed as flags in the footer
@@ -131,10 +232,10 @@ fn bookmark_to_embed(bookmark: Bookmark, linkding_base_url: &Url) -> serenity::C
         embed = embed.footer(serenity::CreateEmbedFooter::new(flags));
     }
 
-    if let Some(image) = bookmark.preview_image_url {
+    if let Some(image) = &bookmark.preview_image_url {
         embed = embed.image(image);
     }
-    if let Some(icon) = bookmark.favicon_url {
+    if let Some(icon) = &bookmark.favicon_url {
         embed = embed.thumbnail(icon);
     }
 

@@ -1,7 +1,9 @@
 use anyhow::Context;
 use url::Url;
 
-use super::{Bookmark, Error};
+use crate::linkding::CreateBookmarkRequest;
+
+use super::{Bookmark, CheckResponse, Error};
 
 #[derive(Debug)]
 pub struct LinkdingApi {
@@ -76,6 +78,36 @@ impl LinkdingApi {
     pub async fn bookmark(&self, id: u64) -> super::Result<Bookmark> {
         let url = self.base_url.join(&format!("api/bookmarks/{}", id))?;
         let response = self.client.get(url).send().await?;
+        let response = Error::for_api_error(response).await?;
+        response
+            .json::<Bookmark>()
+            .await
+            .map_err(|_| Error::InvalidResponseFormat)
+    }
+
+    /// check if a URL is already bookmarked.
+    ///
+    /// If the URL is already bookmarked, the bookmark property in the [response][CheckResponse] holds the bookmark data, otherwise it is [`None`]`].
+    pub async fn check_bookmark(&self, url: Url) -> super::Result<CheckResponse> {
+        let mut req_url = self.base_url.join("api/bookmarks/check/")?;
+        req_url
+            .query_pairs_mut()
+            .append_pair("url", url.as_str())
+            .finish();
+
+        let response = self.client.get(req_url).send().await?;
+        let response = Error::for_api_error(response).await?;
+        response
+            .json::<CheckResponse>()
+            .await
+            .map_err(|_| Error::InvalidResponseFormat)
+    }
+
+    /// Create a new bookmark.
+    pub async fn create_bookmark(&self, req: CreateBookmarkRequest) -> super::Result<Bookmark> {
+        let url = self.base_url.join("api/bookmarks/")?;
+
+        let response = self.client.post(url).json(&req).send().await?;
         let response = Error::for_api_error(response).await?;
         response
             .json::<Bookmark>()

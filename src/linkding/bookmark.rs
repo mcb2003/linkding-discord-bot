@@ -19,3 +19,15 @@ pub struct Bookmark {
     pub website_title: Option<String>,
     pub website_description: Option<String>,
 }
+
+#[derive(Debug, Default, Clone, serde::Serialize)]
+pub struct CreateBookmarkRequest {
+    pub url: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub notes: String,
+    pub is_archived: bool,
+    pub unread: bool,
+    pub shared: bool,
+    pub tag_names: Vec<String>,
+}

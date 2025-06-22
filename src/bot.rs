@@ -286,11 +286,6 @@ fn tags_to_md(tags: &[impl AsRef<str>], base_url: &Url) -> String {
     }
 }
 
-/// Convert a `bool` value to an English word.
-fn human_friendly_bool(b: bool) -> &'static str {
-    if b { "yes" } else { "no" }
-}
-
 /// Create a new Discord client that uses the bot's commands.
 #[tracing::instrument(skip(token))]
 pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {

@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Michael Connor Buchan <mikey@blindcomputing.org>"]
 edition = "2024"
 
+[profile.release]
+lto = "fat"
+
 [dependencies]
 anyhow = "1.0.98"
 chrono = { version = "0.4.41", features = ["serde"] }

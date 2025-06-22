@@ -1,8 +1,7 @@
 use anyhow::Context as AnyhowContext;
-use poise::{Framework, serenity_prelude as serenity};
-use reqwest::Url;
+use poise::{CreateReply, Framework, serenity_prelude as serenity};
 
-use crate::linkding::LinkdingApi;
+use crate::linkding::{Bookmark, LinkdingApi};
 
 struct BotData {
     linkding: LinkdingApi,
@@ -59,6 +58,63 @@ async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Get a link by its ID.
+#[tracing::instrument(skip(ctx))]
+#[poise::command(slash_command, prefix_command, track_edits)]
+async fn link(
+    ctx: Context<'_>,
+    #[description = "The ID of the link to retrieve"] id: u64,
+) -> anyhow::Result<()> {
+    let bot = ctx.framework().user_data().await;
+    let bookmark = bot.linkding.bookmark(id).await?;
+
+    let embed = bookmark_to_embed(bookmark);
+    ctx.send(CreateReply::default().reply(true).embed(embed))
+        .await?;
+
+    Ok(())
+}
+
+/// Convert a [`Bookmark`] into a Discord embed.
+fn bookmark_to_embed(bookmark: Bookmark) -> serenity::CreateEmbed {
+    let mut embed = serenity::CreateEmbed::default()
+        .title(bookmark.title)
+        .description(bookmark.description)
+        .url(bookmark.url)
+        .timestamp(bookmark.date_added);
+
+    let tags = bookmark
+        .tag_names
+        .iter()
+        .fold(String::new(), |mut acc, next| {
+            if acc.is_empty() {
+                format!("#{next}")
+            } else {
+                acc.push_str(" #");
+                acc.push_str(next);
+                acc
+            }
+        });
+    embed =
+        embed
+            .field("Tags", tags, true)
+            .field("Shared", human_friendly_bool(bookmark.shared), true);
+
+    if let Some(image) = bookmark.preview_image_url {
+        embed = embed.image(image);
+    }
+    if let Some(icon) = bookmark.favicon_url {
+        embed = embed.thumbnail(icon);
+    }
+
+    embed
+}
+
+/// Convert a `bool` value to an English word.
+fn human_friendly_bool(b: bool) -> &'static str {
+    if b { "yes" } else { "no" }
+}
+
 /// Create a new Discord client that uses the bot's commands.
 #[tracing::instrument(skip(token))]
 pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
@@ -66,7 +122,7 @@ pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
 
     let framework = Framework::<BotData, anyhow::Error>::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![help(), register(), status()],
+            commands: vec![help(), link(), register(), status()],
             ..Default::default()
         })
         .setup(|ctx, ready, framework| {
@@ -94,24 +150,4 @@ pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
         .framework(framework)
         .await?;
     Ok(client)
-}
-
-pub type DateTime = chrono::DateTime<chrono::Utc>;
-
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct Bookmark {
-    id: u64,
-    url: Url,
-    title: String,
-    description: String,
-    notes: String,
-    web_archive_snapshot_url: Url,
-    favicon_url: String,
-    preview_image_url: String,
-    is_archived: bool,
-    unread: bool,
-    shared: bool,
-    tag_names: Vec<String>,
-    date_added: DateTime,
-    date_modified: DateTime,
 }

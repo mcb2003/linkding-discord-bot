@@ -1,7 +1,7 @@
 mod api;
 pub use api::LinkdingApi;
 mod bookmark;
-use bookmark::Bookmark;
+pub use bookmark::Bookmark;
 mod error;
 pub use error::{Error, Result};
 

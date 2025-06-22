@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use anyhow::Context as AnyhowContext;
 use poise::{CreateReply, Framework, serenity_prelude as serenity};
 use url::Url;
@@ -65,7 +67,7 @@ async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     slash_command,
     prefix_command,
     track_edits,
-    subcommands("link_get", "link_add")
+    subcommands("link_get", "link_add", "link_post")
 )]
 async fn link(
     ctx: Context<'_>,
@@ -147,11 +149,33 @@ impl From<EditLinkModal> for CreateBookmarkRequest {
 }
 
 /// Add a new link.
-#[tracing::instrument(skip(ctx))]
 #[poise::command(slash_command, track_edits, rename = "add")]
 async fn link_add(
     ctx: ApplicationContext<'_>,
     #[description = "The link to add"] link: String,
+) -> anyhow::Result<()> {
+    link_add_internal(ctx, link, true, "✅ Link created!", false).await
+}
+
+/// Add a new link, and post it to the channel with a message.
+#[poise::command(slash_command, track_edits, rename = "post")]
+async fn link_post(
+    ctx: ApplicationContext<'_>,
+    #[description = "The link to add"] link: String,
+    #[description = "The content of the message"]
+    #[rest]
+    message_content: String,
+) -> anyhow::Result<()> {
+    link_add_internal(ctx, link, false, message_content, true).await
+}
+
+#[tracing::instrument(skip(ctx))]
+async fn link_add_internal(
+    ctx: ApplicationContext<'_>,
+    link: String,
+    ephemeral_response: bool,
+    response_content: (impl Into<String> + Debug),
+    allow_repost: bool,
 ) -> anyhow::Result<()> {
     let bot = ctx.framework().user_data().await;
     let url = link.parse().context("Invalid URL")?;
@@ -162,13 +186,23 @@ async fn link_add(
         .await
         .context("Could not communicate with the Linkding API")?;
 
-    // If the bookmark is already saved, notify the user.
     if let Some(bookmark) = response.bookmark() {
-        let reply = CreateReply::default()
-            .reply(true)
-            .ephemeral(true)
-            .content("⚠️ Link already exists")
-            .embed(bookmark_to_embed(bookmark, bot.linkding.base_url()));
+        let embed = bookmark_to_embed(bookmark, bot.linkding.base_url());
+        let reply = if allow_repost {
+            // Skip editting, just post immediately
+            CreateReply::default()
+                .reply(true)
+                .ephemeral(ephemeral_response)
+                .content(response_content)
+                .embed(embed)
+        } else {
+            // Warn the user that the bookmark is already saved
+            CreateReply::default()
+                .reply(true)
+                .ephemeral(true)
+                .content("⚠️ Link already exists")
+                .embed(embed)
+        };
         ctx.send(reply).await?;
         return Ok(());
     }
@@ -182,8 +216,8 @@ async fn link_add(
     let bookmark = bot.linkding.create_bookmark(req).await?;
     let reply = CreateReply::default()
         .reply(true)
-        .ephemeral(true)
-        .content("✅ Link created!")
+        .ephemeral(ephemeral_response)
+        .content(response_content)
         .embed(bookmark_to_embed(&bookmark, bot.linkding.base_url()));
     ctx.send(reply).await?;
 

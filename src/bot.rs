@@ -59,13 +59,26 @@ async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Get a link by its ID.
-#[tracing::instrument(skip(ctx))]
-#[poise::command(slash_command, prefix_command, track_edits)]
+/// Link management commands. With no subcommand, get a link by its ID.
+#[poise::command(slash_command, prefix_command, track_edits, subcommands("link_get"))]
 async fn link(
     ctx: Context<'_>,
     #[description = "The ID of the link to retrieve"] id: u64,
 ) -> anyhow::Result<()> {
+    link_get_internal(ctx, id).await
+}
+
+/// Get a link by its ID.
+#[poise::command(slash_command, prefix_command, track_edits, rename = "get")]
+async fn link_get(
+    ctx: Context<'_>,
+    #[description = "The ID of the link to retrieve"] id: u64,
+) -> anyhow::Result<()> {
+    link_get_internal(ctx, id).await
+}
+
+#[tracing::instrument(skip(ctx))]
+async fn link_get_internal(ctx: Context<'_>, id: u64) -> anyhow::Result<()> {
     let bot = ctx.framework().user_data().await;
     let bookmark = bot.linkding.bookmark(id).await?;
 

@@ -85,11 +85,38 @@ fn bookmark_to_embed(bookmark: Bookmark, linkding_base_url: &Url) -> serenity::C
         .timestamp(bookmark.date_added);
 
     let tags = tags_to_md(&bookmark.tag_names, linkding_base_url);
-    embed = embed.field("Tags", tags, false).field(
-        "Shared",
-        human_friendly_bool(bookmark.shared),
-        true,
-    );
+    embed = embed.field("Tags", tags, false);
+
+    if let Some(archive_url) = bookmark.web_archive_snapshot_url {
+        let value = format!("[view on the Wayback Machine]({})", archive_url);
+        embed = embed.field("Snapshot", value, true);
+    }
+
+    if !bookmark.notes.is_empty() {
+        embed = embed.field("Notes", bookmark.notes, false);
+    }
+
+    // Various miscelaneous information displayed as flags in the footer
+    let flags = {
+        let mut flags = [""; 3];
+        let mut total_flags = 0;
+        if bookmark.unread {
+            flags[total_flags] = "📥 Unread";
+            total_flags += 1;
+        }
+        if bookmark.shared {
+            flags[total_flags] = "🔗 Shared";
+            total_flags += 1;
+        }
+        if bookmark.is_archived {
+            flags[total_flags] = "🗃️ Archived";
+            total_flags += 1;
+        }
+        flags[..total_flags].join(" | ")
+    };
+    if !flags.is_empty() {
+        embed = embed.footer(serenity::CreateEmbedFooter::new(flags));
+    }
 
     if let Some(image) = bookmark.preview_image_url {
         embed = embed.image(image);

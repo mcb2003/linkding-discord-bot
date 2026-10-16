@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # No need to test old commits if new ones have been pushed
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          components: clippy, rustfmt
+          build-warnings: ""
+          cache-key: ${{ matrix.name }}
+
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+    strategy:
+      fail-fast: false # All 3 checks run even if 1 or more fails
+      # We use a matrix here because it allows us to share job setup code (not state) above
+      matrix:
+        include:
+          - name: Formatting
+            command: cargo fmt --all -- --check
+          - name: Clippy
+            command: cargo clippy --locked --all-targets --all-features -- -D warnings
+          - name: Tests
+            command: cargo test --locked --all-targets --all-features

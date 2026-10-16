@@ -1,0 +1,119 @@
+name: CD
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write # Create release
+  packages: write # Push built containers
+  attestations: write # Produce attestation
+  id-token: write # Obtain an OIDC identity for attestation
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check tag matches Cargo package version
+        run: |
+          crate_version="$(
+            cargo metadata --frozen --format-version 1 --no-deps |
+              jq --raw-output --exit-status \
+                '.packages[] | select(.name == "linkding-discord-bot") | .version'
+          )"
+
+          if [[ "$GITHUB_REF_NAME" != "v$crate_version" ]]; then
+            echo "::error title=Version mismatch::Tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log into GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate container metadata
+        id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          labels: |
+            org.opencontainers.image.title=Linkding Discord Bot
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}#readme
+            org.opencontainers.image.authors=Michael Connor Buchan <mikey@blindcomputing.org>
+
+      - name: Export Linux binary
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: binary
+          platforms: linux/amd64
+          outputs: type=local,dest=dist
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+
+      - name: Package Linux binary
+        run: |
+          cd dist
+          archive="linkding-discord-bot-${GITHUB_REF_NAME}-linux-amd64.tar.gz"
+          tar -czf "$archive" linkding-discord-bot
+          rm linkding-discord-bot
+          sha256sum "$archive" > SHA256SUMS
+
+      - name: Build and push container image
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          annotations: ${{ steps.metadata.outputs.annotations }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
+
+          # Lets users confirm this image was built by GitHub Actions in this repo by publishing an image signature
+      - name: Attest container image
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_options=(--verify-tag --generate-notes)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            release_options+=(--prerelease)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.tar.gz \
+            dist/SHA256SUMS \
+            "${release_options[@]}"

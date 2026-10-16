@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 
+# Used as a build environment to build the production image
 FROM docker.io/rust:1.99.1-alpine3.24 AS build
 
 WORKDIR /build
 
-COPY Cargo.toml Cargo.lock .
+COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 
 # Cache mounts aren't available in subsequent images, so copy the built executable out of /build/target after building it
@@ -14,7 +15,13 @@ RUN \
     cargo build --locked --release && \
     cp /build/target/release/linkding-discord-bot /
 
-FROM gcr.io/distroless/static-debian13:nonroot
+# Provides a stage containing only the executable so it can easily be extracted and published with a release
+FROM scratch AS binary
+
+COPY --from=build /linkding-discord-bot /
+
+# The production container for running the bot
+FROM gcr.io/distroless/static-debian13:nonroot AS runtime
 
 # Image metadata
 LABEL org.opencontainers.image.title="Linkding Discord Bot" \

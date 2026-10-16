@@ -36,7 +36,7 @@ Create a `.env` file in the project root with the following variables:
 
 ```env
 DISCORD_TOKEN=your_discord_bot_token
-LINKDING_URL=https://your-linkding-instance.com
+LINKDING_BASE_URL=https://your-linkding-instance.com
 LINKDING_API_TOKEN=your_linkding_api_token
 ```
 

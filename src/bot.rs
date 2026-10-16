@@ -155,7 +155,7 @@ async fn link_add_internal(
     ctx: ApplicationContext<'_>,
     link: String,
     ephemeral_response: bool,
-    response_content: (impl Into<String> + Debug),
+    response_content: impl Into<String> + Debug,
     allow_repost: bool,
 ) -> anyhow::Result<()> {
     let bot = ctx.framework().user_data().await;

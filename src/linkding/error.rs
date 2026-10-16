@@ -15,7 +15,7 @@ pub enum Error {
     #[error("Invalid response format")]
     InvalidResponseFormat,
     #[error("{}", .response.detail)]
-    ErrorResponse {
+    Response {
         status: reqwest::StatusCode,
         #[source]
         response: ErrorResponse,
@@ -34,7 +34,7 @@ impl Error {
             let details = response
                 .json::<ErrorResponse>()
                 .await
-                .map(|response| Error::ErrorResponse { status, response })
+                .map(|response| Error::Response { status, response })
                 .unwrap_or_else(Error::RequestFailed);
             Err(details)
         }

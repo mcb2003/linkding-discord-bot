@@ -57,7 +57,6 @@ Then use the available commands:
 - `/link add <url>` — Add a new link to Linkding
 - `/link get <id>` — Retrieve a link by its ID
 - `/link post <url> <message>` — Post a link to the current channel
-- `/help` List all commands and their descriptions
 
 > If you find you can't run any slash commands, you may need to register them in your server. To do so, mention your bot user in a new message with the content "register", then follow the instructions.
 

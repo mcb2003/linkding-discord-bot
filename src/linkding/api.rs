@@ -28,6 +28,8 @@ impl LinkdingApi {
         let client = reqwest::Client::builder()
             .user_agent(Self::USER_AGENT)
             .default_headers(headers)
+            .tls_built_in_webpki_certs(false)
+            .tls_built_in_native_certs(true)
             .build()
             .expect("Failed to build HTTP client");
 

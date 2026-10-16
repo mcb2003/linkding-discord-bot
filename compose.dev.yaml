@@ -1,0 +1,16 @@
+name: linkding-discord-bot-dev
+
+services:
+  linkding:
+    image: docker.io/sissbruecker/linkding:1.47.0
+    ports:
+      - "127.0.0.1:9090:9090"
+    environment:
+      LD_SUPERUSER_NAME: dev
+      LD_SUPERUSER_PASSWORD: ${LINKDING_DEV_PASSWORD}
+      LD_DISABLE_BACKGROUND_TASKS: "True"
+    volumes:
+      - linkding-data:/etc/linkding/data
+
+volumes:
+  linkding-data:

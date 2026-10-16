@@ -1,5 +1,7 @@
 # Linkding Discord Bot
 
+[![CI](https://github.com/mcb2003/linkding-discord-bot/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/mcb2003/linkding-discord-bot/actions/workflows/ci.yml)
+
 A Discord bot written in Rust using the [poise](https://github.com/serenity-rs/poise) framework (built on top of [serenity](https://github.com/serenity-rs/serenity)). This bot connects to your [Linkding](https://linkding.link) instance via its API, allowing Discord users to manage and share useful links with friends directly from Discord.
 
 > **Status:** Early development. Core features like adding, posting, and retrieving links by ID are functional, but many important features (such as access controls) are not yet implemented.

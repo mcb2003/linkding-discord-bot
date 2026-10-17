@@ -261,40 +261,51 @@ fn bookmark_to_embed(bookmark: &Bookmark, linkding_base_url: &Url) -> serenity::
 ///
 /// We ensure the output is never longer than 1024 characters, the maximum length you can use in a Discord embed field.
 fn tags_to_md(tags: &[impl AsRef<str>], base_url: &Url) -> String {
-    use std::fmt::Write;
+    if tags.is_empty() {
+        return "None".into();
+    }
 
-    let tag_url = base_url.join("bookmarks").expect("Invalid tag URL");
-    let tag_page = |tag: &str| {
-        let query = format!("#{tag}");
-        let mut url = tag_url.clone();
-        url.query_pairs_mut()
-            .clear()
-            .append_pair("q", &query)
-            .finish();
-        url
-    };
-    let tag_md = |tag: &str| format!("[#{tag}]({})", tag_page(tag));
+    // Materialise markdown links
+    let links = tags
+        .iter()
+        .map(|tag| {
+            let hashtag = format!("#{}", tag.as_ref());
+            let mut url = base_url.join("bookmarks").expect("Bookmarks path is valid");
+            url.query_pairs_mut().append_pair("q", &hashtag);
+            format!("[{hashtag}]({url})")
+        })
+        .collect::<Vec<_>>();
 
-    match tags.len() {
-        0 => String::from("None"),
-        1 => tag_md(tags[0].as_ref()),
-        2.. => {
-            // Always show at least one tag, even if it's too long
-            // This could be improved by trying to find the longest tags that fit, but this is fine for now.
-            let mut text = tag_md(tags[0].as_ref());
-            for (i, tag) in tags[1..].iter().enumerate() {
-                let tag_text = tag_md(tag.as_ref());
-                // This algorithm isn't perfect because the " and X more" text *may* be truncated, but since it's very likely to be shorter than a single tag (with link), this will be fine.
-                let new_length = text.len() + tag_text.len() + 1; // +1 for the space character
-                if new_length > 1024 {
-                    let remaining = tags.len() - i - 1;
-                    if remaining > 0 {
-                        write!(text, " and {remaining} more").unwrap();
-                    }
-                } else {
-                    text.push(' ');
-                    text.push_str(&tag_text);
-                }
+    let decimal_digits = |i: usize| if i == 0 { 1 } else { i.ilog10() as usize + 1 };
+    let mut char_count = 0;
+    let mut best_index = None;
+    for (i, link) in links.iter().enumerate() {
+        let new_char_count = char_count + link.chars().count() + if i != 0 { 1 } else { 0 };
+
+        let omitted = links.len() - i - 1;
+        let trailor_len = if omitted > 0 {
+            10 + decimal_digits(omitted) // 10 == " and  more".len()
+        } else {
+            0 // No trailing text
+        };
+
+        if new_char_count + trailor_len > 1024 {
+            break; // Too long
+        }
+
+        char_count = new_char_count;
+        best_index = Some(i);
+    }
+
+    match best_index {
+        None => tags.len().to_string(),
+        Some(i) => {
+            use std::fmt::Write;
+
+            let mut text = links[..=i].join(" ");
+            let remaining = tags.len() - i - 1;
+            if remaining != 0 {
+                write!(&mut text, " and {remaining} more").unwrap();
             }
             text
         }

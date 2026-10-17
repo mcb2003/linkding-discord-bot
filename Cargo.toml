@@ -1,6 +1,6 @@
 [package]
 name = "linkding-discord-bot"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Michael Connor Buchan <mikey@blindcomputing.org>"]
 edition = "2024"
 

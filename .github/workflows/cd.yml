@@ -19,8 +19,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    name: Run CI checks
+    uses: ./.github/workflows/ci.yml
+
   release:
     name: Publish release
+    needs: check # Can't publish until checks pass
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

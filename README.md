@@ -21,35 +21,78 @@ A Discord bot written in Rust using the [poise](https://github.com/serenity-rs/p
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (latest stable)
-- Access to a running [Linkding](https://linkding.link) instance and its API token
-- Discord bot token
+- Access to a running [Linkding](https://linkding.link) instance and its API token,
+- A Discord bot token,
+- For source builds, the [Rust toolchain](https://www.rust-lang.org/tools/install) (latest stable).
 
 ### Installation
 
-Currently, the only way to run the bot is to compile from source.
+#### Docker
+
+Create a `.env` file as described under [Configuration](#configuration), then run the latest stable image:
+
+```bash
+docker run --detach \
+  --name linkding-discord-bot \
+  --restart unless-stopped \
+  --env-file .env \
+  ghcr.io/mcb2003/linkding-discord-bot:latest
+```
+
+#### Docker Compose
+
+Create a `compose.yaml` alongside your `.env` file:
+
+```yaml
+services:
+  bot:
+    image: ghcr.io/mcb2003/linkding-discord-bot:latest
+    restart: unless-stopped
+    env_file: .env
+```
+
+Start the bot in the background:
+
+```bash
+docker compose up --detach
+```
+
+#### From Source
+
+Clone the repository
 
 ```bash
 git clone https://github.com/mcb2003/linkding-discord-bot
 cd linkding-discord-bot
+```
+
+Compile the project:
+
+```bash
 cargo build --release
 ```
 
-### Configuration
-
-Create a `.env` file in the project root with the following variables:
-
-```env
-DISCORD_TOKEN=your_discord_bot_token
-LINKDING_BASE_URL=https://your-linkding-instance.com
-LINKDING_API_TOKEN=your_linkding_api_token
-```
-
-### Running
+Run it:
 
 ```bash
 cargo run --release
 ```
+
+Or:
+
+```bash```
+./target/release/linkding-discord-bot
+```
+
+### Configuration
+
+The bot is configured with environment variables, either collected from the process environment or read from a `.env` file.
+
+Environment Variable | Purpose
+--- | ---
+`DISCORD_TOKEN` | Bot token from your Discord application's **Bot** page (get one in the [Developer Portal](https://discord.com/developers/applications)).
+`LINKDING_BASE_URL` | Base URL of your Linkding instance, e.g. `https://linkding.example.com`.
+`LINKDING_API_TOKEN` | API token used to authenticate requests to your Linkding instance.
 
 ## Usage
 
@@ -69,11 +112,13 @@ More commands and documentation coming soon!
 
 ## Roadmap
 
-- Container images (Docker) for easy deployment
-- More advanced link management features
-- Improved error handling and feedback
-- Access controls
-- Automatic tags based on server / channel
+- More advanced link management features,
+- Searching existing links,
+- Per server Linkding instances,
+- optional per user API tokens,
+- Improved error handling and feedback,
+- Access controls,
+- Automatic tags based on server / channel,
 - More ...
 
 ## Contributing

@@ -107,7 +107,25 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+          CONTAINER_NOTES: |-
+            ## Container image
+
+            [View package](${{ github.server_url }}/${{ github.repository }}/pkgs/container/${{ github.event.repository.name }})
+
+            ```console
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.metadata.outputs.version }}
+            ```
         run: |
+          # We extract these ourselves so we can combine it with the above "Container Image" section
+          annotation_notes="$(
+            git tag --list "$GITHUB_REF_NAME" \
+              --format='## %(contents:subject)%0a%0a%(contents:body)'
+          )"
+
+          printf -v release_notes \
+            '%s\n\n%s' \
+            "$annotation_notes" "$CONTAINER_NOTES"
+
           release_options=(--verify-tag --generate-notes)
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             release_options+=(--prerelease)
@@ -116,4 +134,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             dist/*.tar.gz \
             dist/SHA256SUMS \
+            --notes "$release_notes" \
             "${release_options[@]}"

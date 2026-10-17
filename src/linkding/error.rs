@@ -1,7 +1,6 @@
 use reqwest::Response;
 
-#[derive(Clone, Debug, serde::Deserialize, thiserror::Error)]
-#[error("{detail}")]
+#[derive(Clone, Debug, serde::Deserialize)]
 pub struct ErrorResponse {
     pub(self) detail: String,
 }
@@ -17,7 +16,6 @@ pub enum Error {
     #[error("{}", .response.detail)]
     Response {
         status: reqwest::StatusCode,
-        #[source]
         response: ErrorResponse,
     },
 }
@@ -31,12 +29,18 @@ impl Error {
         if status.is_success() {
             Ok(response)
         } else {
-            let details = response
-                .json::<ErrorResponse>()
-                .await
+            let body = response.bytes().await?;
+            Err(serde_json::from_slice(&body)
                 .map(|response| Error::Response { status, response })
-                .unwrap_or_else(Error::RequestFailed);
-            Err(details)
+                .unwrap_or_else(|_| Error::Response {
+                    status,
+                    response: ErrorResponse {
+                        detail: status
+                            .canonical_reason()
+                            .unwrap_or("Unknown HTTP error")
+                            .to_owned(),
+                    },
+                }))
         }
     }
 }

@@ -7,7 +7,8 @@
 
 A Discord bot written in Rust using the [poise](https://github.com/serenity-rs/poise) framework (built on top of [serenity](https://github.com/serenity-rs/serenity)). This bot connects to your [Linkding](https://linkding.link) instance via its API, allowing Discord users to manage and share useful links with friends directly from Discord.
 
-> **Status:** Early development. Core features like adding, posting, and retrieving links by ID are functional, but many important features (such as access controls) are not yet implemented.
+> [!WARNING] Early development
+> Core features like adding, posting, and retrieving links by ID are functional, but many important features, including access controls, are not yet implemented.
 
 ## Features
 

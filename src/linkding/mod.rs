@@ -8,3 +8,6 @@ mod error;
 pub use error::{Error, Result};
 
 pub type DateTime = chrono::DateTime<chrono::Utc>;
+
+#[cfg(test)]
+mod tests;

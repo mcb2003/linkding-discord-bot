@@ -120,7 +120,7 @@ impl From<EditLinkModal> for CreateBookmarkRequest {
             notes: modal.notes.unwrap_or_default(),
             tag_names: modal
                 .tags
-                .map(|s| s.split(' ').map(ToString::to_string).collect())
+                .map(|s| s.split_whitespace().map(ToString::to_string).collect())
                 .unwrap_or_default(),
             is_archived: false,
             unread: false,

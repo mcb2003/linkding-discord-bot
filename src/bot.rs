@@ -337,3 +337,211 @@ pub async fn create_client(token: String) -> anyhow::Result<serenity::Client> {
         .await?;
     Ok(client)
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn check_response(metadata: Value, auto_tags: Value) -> CheckResponse {
+        serde_json::from_value(json!({
+            "bookmark": null,
+            "metadata": metadata,
+            "auto_tags": auto_tags,
+        }))
+        .expect("fixture should be a valid check response")
+    }
+
+    fn bookmark() -> Bookmark {
+        serde_json::from_value(json!({
+            "id": 42,
+            "url": "https://example.org/article",
+            "title": "Example Article",
+            "description": "A description",
+            "notes": "Read this before Friday",
+            "web_archive_snapshot_url": "https://web.archive.org/example",
+            "favicon_url": "https://example.org/favicon.ico",
+            "preview_image_url": "https://example.org/preview.png",
+            "is_archived": true,
+            "unread": true,
+            "shared": true,
+            "tag_names": ["example", "article"],
+            "date_added": "2026-10-17T12:34:56Z",
+            "date_modified": "2026-10-17T13:00:00Z",
+            "website_title": "Example",
+            "website_description": "Example website",
+        }))
+        .expect("fixture should be a valid bookmark")
+    }
+
+    #[test]
+    fn checked_page_metadata_populates_edit_modal() {
+        let response = check_response(
+            json!({
+                "url": "https://example.org/article",
+                "title": "Example Article",
+                "description": "A description",
+            }),
+            json!(["example", "article"]),
+        );
+
+        let modal: EditLinkModal = response.into();
+
+        assert_eq!(modal.url, "https://example.org/article");
+        assert_eq!(modal.title, "Example Article");
+        assert_eq!(modal.description.as_deref(), Some("A description"));
+        assert_eq!(modal.notes, None);
+        assert_eq!(modal.tags.as_deref(), Some("example article"));
+    }
+
+    #[test]
+    fn checked_page_without_title_uses_url_as_title() {
+        let response = check_response(
+            json!({
+                "url": "https://example.org/untitled",
+                "title": null,
+                "description": null,
+            }),
+            json!([]),
+        );
+
+        let modal: EditLinkModal = response.into();
+
+        assert_eq!(modal.title, "https://example.org/untitled");
+        assert_eq!(modal.description, None);
+    }
+
+    #[test]
+    fn edit_modal_populates_create_request_and_normalises_tags() {
+        let modal = EditLinkModal {
+            url: "https://example.org/article".into(),
+            // Whitespace should be collapsed
+            tags: Some(" example   article\nfriday ".into()),
+            title: "Example Article".into(),
+            description: Some("A description".into()),
+            notes: Some("Read this before Friday".into()),
+        };
+
+        let request: CreateBookmarkRequest = modal.into();
+
+        assert_eq!(request.url, "https://example.org/article");
+        assert_eq!(request.title.as_deref(), Some("Example Article"));
+        assert_eq!(request.description.as_deref(), Some("A description"));
+        assert_eq!(request.notes, "Read this before Friday");
+        assert_eq!(request.tag_names, ["example", "article", "friday"]);
+        assert!(!request.is_archived);
+        assert!(!request.unread);
+        assert!(request.shared);
+    }
+
+    #[test]
+    fn missing_optional_modal_values_become_empty_request_values() {
+        let modal = EditLinkModal {
+            url: "https://example.org/article".into(),
+            tags: None,
+            title: "Example Article".into(),
+            description: None,
+            notes: None,
+        };
+
+        let request: CreateBookmarkRequest = modal.into();
+
+        assert_eq!(request.description, None);
+        assert!(request.notes.is_empty());
+        assert!(request.tag_names.is_empty());
+    }
+
+    #[test]
+    fn tag_markdown_handles_empty_and_url_encoded_tags() {
+        let base_url = Url::parse("https://links.example/").unwrap();
+        let no_tags: [&str; 0] = [];
+
+        assert_eq!(tags_to_md(&no_tags, &base_url), "None");
+        assert_eq!(
+            tags_to_md(&["article"], &base_url),
+            "[#article](https://links.example/bookmarks?q=%23article)"
+        );
+    }
+
+    #[test]
+    fn tag_markdown_stays_within_discord_field_limit() {
+        let base_url = Url::parse("https://links.example/").unwrap();
+        let tags = (0..30)
+            .map(|index| format!("tag-{index}-{}", "x".repeat(80)))
+            .collect::<Vec<_>>();
+
+        let markdown = tags_to_md(&tags, &base_url);
+
+        assert!(markdown.chars().count() <= 1024);
+        assert!(markdown.ends_with(" more"));
+        assert!(!markdown.contains("tag-29-"));
+    }
+
+    #[test]
+    fn bookmark_populates_discord_embed() {
+        let bookmark = bookmark();
+        let base_url = Url::parse("https://links.example/").unwrap();
+
+        let embed = serde_json::to_value(bookmark_to_embed(&bookmark, &base_url))
+            .expect("embed should be serializable");
+
+        assert_eq!(embed["title"], "Example Article");
+        assert_eq!(embed["description"], "A description");
+        assert_eq!(embed["url"], "https://example.org/article");
+        assert_eq!(
+            embed["fields"],
+            json!([
+                {
+                    "name": "Tags",
+                    "value": "[#example](https://links.example/bookmarks?q=%23example) [#article](https://links.example/bookmarks?q=%23article)",
+                    "inline": false
+                },
+                {
+                    "name": "Snapshot",
+                    "value": "[view on the Wayback Machine](https://web.archive.org/example)",
+                    "inline": true
+                },
+                {
+                    "name": "Notes",
+                    "value": "Read this before Friday",
+                    "inline": false
+                }
+            ])
+        );
+        assert_eq!(
+            embed["footer"]["text"],
+            "📥 Unread | 🔗 Shared | 🗃️ Archived"
+        );
+        assert_eq!(embed["image"]["url"], "https://example.org/preview.png");
+        assert_eq!(embed["thumbnail"]["url"], "https://example.org/favicon.ico");
+        assert!(embed["timestamp"].is_string());
+    }
+
+    #[test]
+    fn bookmark_without_optional_data_produces_minimal_embed() {
+        let mut bookmark = bookmark();
+        bookmark.notes.clear();
+        bookmark.web_archive_snapshot_url = None;
+        bookmark.favicon_url = None;
+        bookmark.preview_image_url = None;
+        bookmark.is_archived = false;
+        bookmark.unread = false;
+        bookmark.shared = false;
+        bookmark.tag_names.clear();
+
+        let embed = serde_json::to_value(bookmark_to_embed(
+            &bookmark,
+            &Url::parse("https://links.example/").unwrap(),
+        ))
+        .expect("embed should be serializable");
+
+        assert_eq!(
+            embed["fields"],
+            json!([{"name": "Tags", "value": "None", "inline": false}])
+        );
+        assert!(embed.get("footer").is_none());
+        assert!(embed.get("image").is_none());
+        assert!(embed.get("thumbnail").is_none());
+    }
+}

@@ -78,7 +78,7 @@ impl LinkdingApi {
 impl LinkdingApi {
     /// Get bookmark by ID.
     pub async fn bookmark(&self, id: u64) -> super::Result<Bookmark> {
-        let url = self.base_url.join(&format!("api/bookmarks/{}", id))?;
+        let url = self.base_url.join(&format!("api/bookmarks/{}/", id))?;
         let response = self.client.get(url).send().await?;
         let response = Error::for_api_error(response).await?;
         response
